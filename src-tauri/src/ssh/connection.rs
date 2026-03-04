@@ -152,52 +152,71 @@ impl SshSession {
     async fn do_auth(&self, handle: &mut russh::client::Handle<SshHandler>) -> Result<()> {
         match &self.config.target.auth {
             AuthMethod::Password { password } => {
-                // Try password auth first
-                tracing::info!("Trying password auth...");
-                let auth_result = handle
-                    .authenticate_password(&self.config.target.username, password)
-                    .await?;
-                tracing::info!("Password auth result: {}", auth_result);
+                // Try keyboard-interactive first (most common for modern servers)
+                tracing::info!("Trying keyboard-interactive auth...");
+                let ki_start = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    handle.authenticate_keyboard_interactive_start(&self.config.target.username, None),
+                ).await;
 
-                if !auth_result {
-                    // Fall back to keyboard-interactive (many servers require this)
-                    tracing::info!("Password rejected, trying keyboard-interactive...");
+                let mut authenticated = false;
 
-                    // Step 1: Initiate keyboard-interactive
-                    let ki_result = handle
-                        .authenticate_keyboard_interactive_start(&self.config.target.username, None)
-                        .await?;
-                    tracing::info!("KI initiation result: {:?}", ki_result);
+                match ki_start {
+                    Ok(Ok(ki_result)) => {
+                        tracing::info!("KI initiation result: {:?}", ki_result);
+                        // Respond with password
+                        tracing::info!("Sending KI response...");
+                        let ki_response = tokio::time::timeout(
+                            std::time::Duration::from_secs(5),
+                            handle.authenticate_keyboard_interactive_respond(vec![password.clone()]),
+                        ).await;
 
-                    // Step 2: Respond with password to the prompt
-                    tracing::info!("Sending KI response...");
-                    let ki_result = handle
-                        .authenticate_keyboard_interactive_respond(
-                            vec![password.clone()],
-                        )
-                        .await?;
-                    tracing::info!("KI response result: {:?}", ki_result);
-
-                    match ki_result {
-                        russh::client::KeyboardInteractiveAuthResponse::Success => {
-                            tracing::info!("Keyboard-interactive auth succeeded");
-                        }
-                        russh::client::KeyboardInteractiveAuthResponse::Failure => {
-                            anyhow::bail!(
-                                "Authentication failed for {}@{} (tried password + keyboard-interactive)",
-                                self.config.target.username,
-                                self.config.target.host
-                            );
-                        }
-                        other => {
-                            tracing::warn!("Unexpected KI response: {:?}", other);
-                            anyhow::bail!(
-                                "Unexpected keyboard-interactive response for {}@{}",
-                                self.config.target.username,
-                                self.config.target.host
-                            );
+                        match ki_response {
+                            Ok(Ok(resp)) => {
+                                tracing::info!("KI response result: {:?}", resp);
+                                match resp {
+                                    russh::client::KeyboardInteractiveAuthResponse::Success => {
+                                        tracing::info!("Keyboard-interactive auth succeeded");
+                                        authenticated = true;
+                                    }
+                                    other => {
+                                        tracing::warn!("KI auth not successful: {:?}", other);
+                                    }
+                                }
+                            }
+                            Ok(Err(e)) => tracing::warn!("KI respond error: {}", e),
+                            Err(_) => tracing::warn!("KI respond timed out"),
                         }
                     }
+                    Ok(Err(e)) => tracing::warn!("KI start error: {}", e),
+                    Err(_) => tracing::warn!("KI start timed out"),
+                }
+
+                // Fall back to password auth if KI didn't work
+                if !authenticated {
+                    tracing::info!("Trying password auth...");
+                    let auth_result = tokio::time::timeout(
+                        std::time::Duration::from_secs(5),
+                        handle.authenticate_password(&self.config.target.username, password),
+                    ).await;
+
+                    match auth_result {
+                        Ok(Ok(true)) => {
+                            tracing::info!("Password auth succeeded");
+                            authenticated = true;
+                        }
+                        Ok(Ok(false)) => tracing::warn!("Password auth rejected"),
+                        Ok(Err(e)) => tracing::warn!("Password auth error: {}", e),
+                        Err(_) => tracing::warn!("Password auth timed out"),
+                    }
+                }
+
+                if !authenticated {
+                    anyhow::bail!(
+                        "Authentication failed for {}@{} (tried keyboard-interactive + password)",
+                        self.config.target.username,
+                        self.config.target.host
+                    );
                 }
             }
             AuthMethod::Key { key_path, passphrase } => {
