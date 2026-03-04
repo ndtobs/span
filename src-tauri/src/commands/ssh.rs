@@ -44,7 +44,7 @@ pub async fn connect(
             port: args.port,
             username: args.username,
             auth: match args.auth_method.as_str() {
-                "key" => AuthMethod::Key { key_path: args.key_path.unwrap_or_default() },
+                "key" => AuthMethod::Key { key_path: args.key_path.unwrap_or_default(), passphrase: None },
                 _ => AuthMethod::Password { password: args.password.unwrap_or_default() },
             },
         },
