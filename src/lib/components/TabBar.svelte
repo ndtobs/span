@@ -1,6 +1,12 @@
 <script lang="ts">
   import { sessionStore } from "$lib/stores/sessions.svelte";
 
+  interface Props {
+    onnewconnection?: () => void;
+  }
+
+  let { onnewconnection }: Props = $props();
+
   function statusColor(status: string): string {
     switch (status) {
       case "connected":

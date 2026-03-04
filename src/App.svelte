@@ -1,5 +1,6 @@
 <script lang="ts">
   import "./app.css";
+  import { onMount } from "svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import TabBar from "$lib/components/TabBar.svelte";
   import Terminal from "$lib/components/Terminal.svelte";
@@ -7,8 +8,13 @@
   import QuickConnect from "$lib/components/QuickConnect.svelte";
   import { sessionStore } from "$lib/stores/sessions.svelte";
   import { uiStore } from "$lib/stores/ui.svelte";
+  import { inventoryStore } from "$lib/stores/inventory.svelte";
 
   let showQuickConnect = $state(false);
+
+  onMount(() => {
+    inventoryStore.load();
+  });
 
   function handleKeydown(e: KeyboardEvent) {
     // Ctrl+K: Quick connect
@@ -48,7 +54,7 @@
 <div class="app-container">
   <div class="app-body">
     {#if uiStore.sidebarVisible}
-      <Sidebar />
+      <Sidebar onadddevice={() => showQuickConnect = true} />
     {/if}
 
     <div class="main-content">

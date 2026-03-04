@@ -89,7 +89,15 @@
     // Listen for data from SSH backend
     dataListener = await listen(`session-data-${session.id}`, (event: any) => {
       if (term && event.payload) {
-        term.write(event.payload);
+        // Decode base64 payload to Uint8Array before writing to terminal
+        try {
+          const bytes = Uint8Array.from(atob(event.payload), c => c.charCodeAt(0));
+          term.write(bytes);
+        } catch (error) {
+          console.error("Failed to decode base64 SSH data:", error);
+          // Fallback to raw payload if decoding fails
+          term.write(event.payload);
+        }
       }
     });
 

@@ -1,17 +1,44 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
+  import { sessionStore } from "$lib/stores/sessions.svelte";
   import { inventoryStore } from "$lib/stores/inventory.svelte";
   import type { InventoryFolder, InventoryDevice } from "$lib/types";
 
-  function handleDeviceClick(device: InventoryDevice) {
-    // TODO: initiate SSH connection via Tauri command
-    console.log("Connect to:", device.name, device.connectionConfig.host);
+  interface Props {
+    onadddevice?: () => void;
+  }
+
+  let { onadddevice }: Props = $props();
+
+  async function handleDeviceClick(device: InventoryDevice) {
+    try {
+      const sessionId = crypto.randomUUID();
+      
+      sessionStore.add({
+        id: sessionId,
+        connectionId: device.connectionConfig.id,
+        name: device.name,
+        status: "connecting",
+        startedAt: Date.now(),
+      });
+
+      await invoke("connect", {
+        sessionId,
+        host: device.connectionConfig.host,
+        port: device.connectionConfig.port,
+        username: device.connectionConfig.username,
+      });
+    } catch (error) {
+      console.error("Failed to connect:", error);
+      sessionStore.updateStatus(sessionId, "error");
+    }
   }
 </script>
 
 <aside class="sidebar">
   <div class="sidebar-header">
     <span class="section-title">Inventory</span>
-    <button class="icon-btn" title="Add device">+</button>
+    <button class="icon-btn" title="Add device" onclick={() => onadddevice?.()}>+</button>
   </div>
 
   <div class="search-box">

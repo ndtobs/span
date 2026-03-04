@@ -135,8 +135,32 @@ pub async fn add_device(args: AddDeviceArgs) -> Result<Device, String> {
 
 /// Update an existing device
 #[command]
-pub async fn update_device(id: String, _args: AddDeviceArgs) -> Result<(), String> {
-    tracing::info!("Update device: {}", id);
+pub async fn update_device(id: String, args: AddDeviceArgs) -> Result<(), String> {
+    let now = chrono::Utc::now().timestamp();
+    let tags = args.tags.unwrap_or_default();
+    let tags_json = serde_json::to_string(&tags).map_err(|e| e.to_string())?;
+
+    let db = db::get_db().lock().map_err(|_| "DB lock failed".to_string())?;
+    db.execute(
+        "UPDATE devices SET name=?1, folder_id=?2, host=?3, port=?4, username=?5, auth_method=?6, key_path=?7, platform=?8, tags=?9, notes=?10, updated_at=?11 
+         WHERE id=?12",
+        params![
+            &args.name,
+            &args.folder_id,
+            &args.host,
+            &args.port.unwrap_or(22),
+            &args.username,
+            &args.auth_method.unwrap_or_else(|| "key".to_string()),
+            &args.key_path,
+            &args.platform,
+            &tags_json,
+            &args.notes,
+            &now,
+            &id,
+        ],
+    ).map_err(|e| e.to_string())?;
+
+    tracing::info!("Updated device: {}", id);
     Ok(())
 }
 
@@ -157,6 +181,22 @@ pub async fn add_folder(name: String, parent_id: Option<String>) -> Result<Folde
         parent_id,
         sort_order: 0,
     };
+    
+    let db = db::get_db().lock().map_err(|_| "DB lock failed".to_string())?;
+    let now = chrono::Utc::now().timestamp();
+    db.execute(
+        "INSERT INTO folders (id, name, parent_id, sort_order, created_at, updated_at) 
+         VALUES (?1,?2,?3,?4,?5,?6)",
+        params![
+            &folder.id,
+            &folder.name,
+            &folder.parent_id,
+            &folder.sort_order,
+            &now,
+            &now,
+        ],
+    ).map_err(|e| e.to_string())?;
+    
     Ok(folder)
 }
 
@@ -165,7 +205,60 @@ pub async fn add_folder(name: String, parent_id: Option<String>) -> Result<Folde
 pub async fn import_securecrt(path: String) -> Result<u32, String> {
     let sessions = import::import_securecrt_sessions(std::path::Path::new(&path))
         .map_err(|e| e.to_string())?;
+    
+    let db = db::get_db().lock().map_err(|_| "DB lock failed".to_string())?;
+    let now = chrono::Utc::now().timestamp();
+    
+    // Create a map to track folders we've created
+    let mut folder_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    
+    // First pass: create all folders
+    for session in &sessions {
+        if let Some(folder_name) = &session.folder {
+            if !folder_map.contains_key(folder_name) {
+                let folder_id = uuid::Uuid::new_v4().to_string();
+                db.execute(
+                    "INSERT INTO folders (id, name, parent_id, sort_order, created_at, updated_at) 
+                     VALUES (?1,?2,?3,?4,?5,?6)",
+                    params![&folder_id, &folder_name, None::<String>, 0, &now, &now],
+                ).map_err(|e| e.to_string())?;
+                folder_map.insert(folder_name.clone(), folder_id);
+            }
+        }
+    }
+    
+    // Second pass: create all devices
+    for session in &sessions {
+        let device_id = uuid::Uuid::new_v4().to_string();
+        let folder_id = session.folder.as_ref().and_then(|f| folder_map.get(f).cloned());
+        let tags_json = "[]".to_string();
+        let jump_json = "[]".to_string();
+        let post_json = "[]".to_string();
+        
+        db.execute(
+            "INSERT INTO devices (id, name, folder_id, host, port, username, auth_method, key_path, platform, tags, jump_hosts, post_connect_commands, notes, created_at, updated_at) 
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+            params![
+                &device_id,
+                &session.name,
+                &folder_id,
+                &session.host,
+                &session.port,
+                &session.username,
+                "key", // auth_method - SecureCRT default
+                None::<String>, // key_path
+                None::<String>, // platform
+                &tags_json,
+                &jump_json,
+                &post_json,
+                None::<String>, // notes
+                &now,
+                &now,
+            ],
+        ).map_err(|e| e.to_string())?;
+    }
+    
     let count = sessions.len() as u32;
-    tracing::info!("Imported {} sessions from SecureCRT", count);
+    tracing::info!("Imported {} sessions from SecureCRT into database", count);
     Ok(count)
 }
