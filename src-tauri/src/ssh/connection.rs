@@ -160,11 +160,32 @@ impl SshSession {
                 tracing::info!("Password auth result: {}", auth_result);
 
                 if !auth_result {
-                    anyhow::bail!(
-                        "Authentication failed for {}@{}",
-                        self.config.target.username,
-                        self.config.target.host
-                    );
+                    // Fall back to keyboard-interactive (many servers require this)
+                    tracing::info!("Password rejected, trying keyboard-interactive...");
+
+                    // Step 1: Initiate keyboard-interactive
+                    let ki_result = handle
+                        .authenticate_keyboard_interactive(&self.config.target.username, None)
+                        .await?;
+                    tracing::info!("KI initiation result: {:?}", ki_result);
+
+                    // Step 2: Respond with password to the prompt
+                    tracing::info!("Sending KI response...");
+                    let ki_result = handle
+                        .authenticate_keyboard_interactive_response(
+                            &self.config.target.username,
+                            vec![password.clone()],
+                        )
+                        .await?;
+                    tracing::info!("KI response result: {:?}", ki_result);
+
+                    if !ki_result {
+                        anyhow::bail!(
+                            "Authentication failed for {}@{} (tried password + keyboard-interactive)",
+                            self.config.target.username,
+                            self.config.target.host
+                        );
+                    }
                 }
             }
             AuthMethod::Key { key_path, passphrase } => {
