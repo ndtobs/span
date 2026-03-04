@@ -4,6 +4,8 @@
 
 use tauri::Manager;
 
+use crate::ssh::manager::SshManager;
+
 mod commands;
 mod credentials;
 mod inventory;
@@ -14,6 +16,7 @@ fn main() {
     tracing_subscriber::fmt::init();
 
     tauri::Builder::default()
+        .manage_state(SshManager::new())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             // SSH commands

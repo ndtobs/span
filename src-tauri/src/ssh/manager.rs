@@ -4,6 +4,7 @@ use tokio::sync::Mutex;
 use anyhow::Result;
 
 use super::connection::{SshSession, ConnectionConfig};
+use tokio::sync::mpsc;
 
 /// Manages all active SSH sessions
 pub struct SshManager {
@@ -18,13 +19,14 @@ impl SshManager {
     }
 
     /// Create and connect a new SSH session
-    pub async fn connect(&self, id: String, config: ConnectionConfig) -> Result<()> {
+    pub async fn connect(&self, id: String, config: ConnectionConfig) -> Result<mpsc::Receiver<Vec<u8>>> {
         let mut session = SshSession::new(id.clone(), config);
         session.connect().await?;
 
+        let rx = session.rx.take().expect("No rx channel after connect");
         let mut sessions = self.sessions.lock().await;
         sessions.insert(id, session);
-        Ok(())
+        Ok(rx)
     }
 
     /// Disconnect and remove a session

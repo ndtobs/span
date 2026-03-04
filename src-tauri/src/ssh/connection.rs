@@ -47,10 +47,8 @@ pub struct SshSession {
     pub config: ConnectionConfig,
     _handle: Option<russh::client::Handle<SshHandler>>,
     channel: Option<russh::Channel<russh::client::Msg>>,
-    /// Sender for data going TO the SSH server
-    pub tx: mpsc::Sender<Vec<u8>>,
     /// Receiver for data coming FROM the SSH server
-    pub rx: mpsc::Receiver<Vec<u8>>,
+    pub rx: Option<mpsc::Receiver<Vec<u8>>>,
 }
 
 /// Handler for SSH client events
@@ -86,16 +84,12 @@ impl russh::client::Handler for SshHandler {
 impl SshSession {
     /// Create a new SSH session (does not connect yet)
     pub fn new(id: String, config: ConnectionConfig) -> Self {
-        let (tx, _rx_internal) = mpsc::channel(256);
-        let (_tx_internal, rx) = mpsc::channel(256);
-
         Self {
             id,
             config,
             _handle: None,
             channel: None,
-            tx,
-            rx,
+            rx: None,
         }
     }
 
@@ -155,7 +149,7 @@ impl SshSession {
         tracing::info!("Connected to {}", self.config.target.host);
         self._handle = Some(handle);
         self.channel = Some(channel);
-        self.rx = data_rx;
+        self.rx = Some(data_rx);
 
         Ok(())
     }

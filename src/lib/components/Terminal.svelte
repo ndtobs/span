@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { sessionStore } from "$lib/stores/sessions";
   import type { Session } from "$lib/types";
 
   interface Props {
@@ -10,6 +13,8 @@
   let terminalEl: HTMLDivElement;
   let term: any = null;
   let fitAddon: any = null;
+  let dataListener: UnlistenFn | null = null;
+  let statusListener: UnlistenFn | null = null;
 
   onMount(async () => {
     // Dynamic imports to avoid SSR issues
@@ -64,22 +69,45 @@
     fitAddon.fit();
 
     // Handle user input → send to SSH backend
-    term.onData((data: string) => {
-      // TODO: invoke Tauri command to send data to SSH session
-      // invoke("session_write", { sessionId: session.id, data });
+    term.onData(async (data: string) => {
+      try {
+        await invoke("write_data", { sessionId: session.id, data });
+      } catch (error) {
+        console.error("Failed to write data to session:", error);
+      }
     });
 
     // Handle resize
-    term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-      // TODO: invoke Tauri command to resize PTY
-      // invoke("session_resize", { sessionId: session.id, cols, rows });
+    term.onResize(async ({ cols, rows }: { cols: number; rows: number }) => {
+      try {
+        await invoke("resize", { sessionId: session.id, cols, rows });
+      } catch (error) {
+        console.error("Failed to resize session:", error);
+      }
     });
 
     // Listen for data from SSH backend
-    // TODO: listen for Tauri events
-    // listen(`session-data-${session.id}`, (event) => {
-    //   term.write(event.payload as string);
-    // });
+    dataListener = await listen(`session-data-${session.id}`, (event: any) => {
+      if (term && event.payload) {
+        term.write(event.payload);
+      }
+    });
+
+    // Listen for session status updates
+    statusListener = await listen(`session-status-${session.id}`, (event: any) => {
+      if (event.payload) {
+        sessionStore.updateStatus(session.id, event.payload);
+        if (event.payload === "connected") {
+          // Clear welcome message and indicate ready
+          term.clear();
+          term.writeln(`\x1b[1;32m✓\x1b[0m Connected to ${session.name}`);
+          term.writeln("");
+        } else if (event.payload === "error") {
+          term.writeln(`\x1b[1;31m✗\x1b[0m Failed to connect to ${session.name}`);
+          term.writeln("");
+        }
+      }
+    });
 
     // Handle window resize
     const resizeObserver = new ResizeObserver(() => {
@@ -94,10 +122,14 @@
 
     return () => {
       resizeObserver.disconnect();
+      dataListener?.();
+      statusListener?.();
     };
   });
 
   onDestroy(() => {
+    dataListener?.();
+    statusListener?.();
     term?.dispose();
   });
 
