@@ -49,13 +49,14 @@ pub async fn connect(
 
     // Spawn task to forward SSH data as Tauri events
     let session_id = args.session_id.clone();
-    let (tx, mut rx) = mpsc::channel::<Vec<u8>>(256);
+    let (_tx, mut rx) = mpsc::channel::<Vec<u8>>(256);
     let app_handle_clone = app_handle.clone();
+    let session_id_for_emit = session_id.clone();
 
     tokio::spawn(async move {
         while let Some(data) = rx.recv().await {
             let payload = STANDARD.encode(&data);
-            let _ = app_handle_clone.emit(&format!("session-data-{}", session_id), payload);
+            let _ = app_handle_clone.emit(&format!("session-data-{}", session_id_for_emit), payload);
         }
     });
 
