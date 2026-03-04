@@ -18,10 +18,13 @@
 <div class="tabbar">
   <div class="tabs">
     {#each sessionStore.sessions as session}
-      <button
+      <div
         class="tab"
         class:active={session.id === sessionStore.activeId}
+        role="tab"
+        tabindex="0"
         onclick={() => sessionStore.setActive(session.id)}
+        onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') sessionStore.setActive(session.id); }}
       >
         <span
           class="status-dot"
@@ -35,7 +38,7 @@
         >
           ✕
         </button>
-      </button>
+      </div>
     {/each}
   </div>
 
