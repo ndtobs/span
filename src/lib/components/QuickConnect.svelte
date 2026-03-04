@@ -8,9 +8,9 @@
   }
 
   let { onclose }: Props = $props();
-  let inputEl: HTMLInputElement;
-  let usernameEl: HTMLInputElement;
-  let passwordEl: HTMLInputElement;
+  let inputEl = $state<HTMLInputElement | null>(null);
+  let usernameEl = $state<HTMLInputElement | null>(null);
+  let passwordEl = $state<HTMLInputElement | null>(null);
   let query = $state("");
   let step = $state<"host" | "credentials">("host");
   let username = $state("");
