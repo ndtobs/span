@@ -103,12 +103,14 @@ impl SshSession {
         let addr = format!("{}:{}", self.config.target.host, self.config.target.port);
         tracing::info!("Connecting to {}", addr);
 
+        tracing::info!("Starting SSH handshake with {}...", addr);
         let mut handle = tokio::time::timeout(
             std::time::Duration::from_secs(10),
             russh::client::connect(Arc::new(ssh_config), addr.as_str(), handler),
         )
         .await
-        .map_err(|_| anyhow::anyhow!("Connection timed out after 10 seconds"))??;
+        .map_err(|_| anyhow::anyhow!("Connection timed out after 10 seconds ({})", addr))??;
+        tracing::info!("SSH handshake complete with {}", addr);
 
         // Authenticate
         match &self.config.target.auth {
@@ -135,6 +137,8 @@ impl SshSession {
             }
         }
 
+        tracing::info!("Authentication successful for {}", self.config.target.host);
+
         // Open a channel and request PTY
         let channel = handle.channel_open_session().await?;
         channel
@@ -148,9 +152,10 @@ impl SshSession {
                 &[],
             )
             .await?;
+        tracing::info!("PTY requested, requesting shell...");
         channel.request_shell(false).await?;
 
-        tracing::info!("Connected to {}", self.config.target.host);
+        tracing::info!("Shell ready on {}", self.config.target.host);
         self._handle = Some(handle);
         self.channel = Some(channel);
         self.rx = Some(data_rx);
