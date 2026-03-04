@@ -1,10 +1,9 @@
 use anyhow::Result;
 use rusqlite::Connection;
 use std::path::Path;
-use std::sync::Mutex;
-use once_cell::sync::OnceCell;
+use std::sync::{Mutex, OnceLock};
 
-static DB: OnceCell<Mutex<Connection>> = OnceCell::new();
+static DB: OnceLock<Mutex<Connection>> = OnceLock::new();
 
 /// Initialize the SQLite database with schema
 pub fn initialize(db_path: &Path) -> Result<()> {

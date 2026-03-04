@@ -1,4 +1,5 @@
 use anyhow::Result;
+use async_trait::async_trait;
 use russh::*;
 use russh_keys::*;
 use serde::{Deserialize, Serialize};
@@ -44,7 +45,7 @@ pub struct ConnectionConfig {
 pub struct SshSession {
     pub id: String,
     pub config: ConnectionConfig,
-    handle: Option<russh::client::Handle<SshHandler>>,
+    _handle: Option<russh::client::Handle<SshHandler>>,
     channel: Option<russh::Channel<russh::client::Msg>>,
     /// Sender for data going TO the SSH server
     pub tx: mpsc::Sender<Vec<u8>>,
@@ -53,17 +54,18 @@ pub struct SshSession {
 }
 
 /// Handler for SSH client events
-struct SshHandler {
+pub struct SshHandler {
     data_tx: mpsc::Sender<Vec<u8>>,
 }
 
+#[async_trait]
 impl russh::client::Handler for SshHandler {
     type Error = anyhow::Error;
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &ssh_key::PublicKey,
-    ) -> Result<bool, Self::Error> {
+        _server_public_key: &russh_keys::key::PublicKey,
+    ) -> std::result::Result<bool, Self::Error> {
         // TODO: implement host key verification (known_hosts)
         // For MVP, accept all keys (NOT safe for production)
         tracing::warn!("Accepting server key without verification - implement known_hosts check");
@@ -75,7 +77,7 @@ impl russh::client::Handler for SshHandler {
         _channel: ChannelId,
         data: &[u8],
         _session: &mut russh::client::Session,
-    ) -> Result<(), Self::Error> {
+    ) -> std::result::Result<(), Self::Error> {
         self.data_tx.send(data.to_vec()).await?;
         Ok(())
     }
@@ -90,7 +92,7 @@ impl SshSession {
         Self {
             id,
             config,
-            handle: None,
+            _handle: None,
             channel: None,
             tx,
             rx,
@@ -151,7 +153,7 @@ impl SshSession {
         channel.request_shell(false).await?;
 
         tracing::info!("Connected to {}", self.config.target.host);
-        self.handle = Some(handle);
+        self._handle = Some(handle);
         self.channel = Some(channel);
         self.rx = data_rx;
 
@@ -179,7 +181,7 @@ impl SshSession {
         if let Some(channel) = self.channel.take() {
             let _ = channel.eof().await;
         }
-        if let Some(handle) = self.handle.take() {
+        if let Some(handle) = self._handle.take() {
             handle
                 .disconnect(russh::Disconnect::ByApplication, "", "en")
                 .await?;

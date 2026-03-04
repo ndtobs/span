@@ -16,6 +16,10 @@ pub struct LuaEngine {
     lua: Lua,
 }
 
+fn lua_err(e: LuaError) -> anyhow::Error {
+    anyhow::anyhow!("Lua error: {}", e)
+}
+
 impl LuaEngine {
     pub fn new() -> Result<Self> {
         let lua = Lua::new();
@@ -29,28 +33,27 @@ impl LuaEngine {
             span.sleep = function(ms)
                 __span_sleep(ms)
             end
-        "#).exec()?;
+        "#).exec().map_err(lua_err)?;
 
         // Register Rust-backed functions
         let log_fn = lua.create_function(|_, msg: String| {
             tracing::info!("[lua] {}", msg);
             Ok(())
-        })?;
-        lua.globals().set("__span_log", log_fn)?;
+        }).map_err(lua_err)?;
+        lua.globals().set("__span_log", log_fn).map_err(lua_err)?;
 
         let sleep_fn = lua.create_function(|_, ms: u64| {
-            // Note: this is blocking sleep. For async, we'd need mlua async features.
             std::thread::sleep(std::time::Duration::from_millis(ms));
             Ok(())
-        })?;
-        lua.globals().set("__span_sleep", sleep_fn)?;
+        }).map_err(lua_err)?;
+        lua.globals().set("__span_sleep", sleep_fn).map_err(lua_err)?;
 
         Ok(Self { lua })
     }
 
     /// Execute a Lua script from a string
     pub fn exec_script(&self, script: &str) -> Result<()> {
-        self.lua.load(script).exec()?;
+        self.lua.load(script).exec().map_err(lua_err)?;
         Ok(())
     }
 
@@ -61,35 +64,27 @@ impl LuaEngine {
     }
 
     /// Register a session object that Lua scripts can interact with
-    ///
-    /// This creates a Lua userdata that proxies calls to the SSH session:
-    ///   session:send("show version")
-    ///   local output = session:expect("#")
-    ///
-    /// TODO: Wire this up to actual SshSession instances
     pub fn register_session(&self, session_id: &str) -> Result<()> {
         let id = session_id.to_string();
 
-        let session_table = self.lua.create_table()?;
-        session_table.set("id", id.clone())?;
+        let session_table = self.lua.create_table().map_err(lua_err)?;
+        session_table.set("id", id.clone()).map_err(lua_err)?;
 
-        // session:send(data) - send data to the SSH channel
+        // session:send(data)
         let send_fn = self.lua.create_function(move |_, (_self_table, data): (LuaTable, String)| {
-            // TODO: route through SshManager
             tracing::info!("[lua] session.send: {}", data.trim());
             Ok(())
-        })?;
-        session_table.set("send", send_fn)?;
+        }).map_err(lua_err)?;
+        session_table.set("send", send_fn).map_err(lua_err)?;
 
-        // session:expect(pattern) - wait for pattern, return captured output
+        // session:expect(pattern)
         let expect_fn = self.lua.create_function(|_, (_self_table, pattern): (LuaTable, String)| {
-            // TODO: implement expect-style pattern matching on SSH output
             tracing::info!("[lua] session.expect: {}", pattern);
-            Ok(String::new()) // placeholder
-        })?;
-        session_table.set("expect", expect_fn)?;
+            Ok(String::new())
+        }).map_err(lua_err)?;
+        session_table.set("expect", expect_fn).map_err(lua_err)?;
 
-        self.lua.globals().set("session", session_table)?;
+        self.lua.globals().set("session", session_table).map_err(lua_err)?;
         Ok(())
     }
 }
@@ -108,10 +103,10 @@ mod tests {
     fn test_lua_engine_session() {
         let engine = LuaEngine::new().unwrap();
         engine.register_session("test-session").unwrap();
-        engine.exec_script(r#"
+        engine.exec_script(r##"
             span.log("Session ID: " .. session.id)
             session:send("show version\n")
             local output = session:expect("#")
-        "#).unwrap();
+        "##).unwrap();
     }
 }

@@ -61,7 +61,7 @@ pub async fn add_device(args: AddDeviceArgs) -> Result<inventory::Device, String
 
 /// Update an existing device
 #[command]
-pub async fn update_device(id: String, args: AddDeviceArgs) -> Result<(), String> {
+pub async fn update_device(id: String, _args: AddDeviceArgs) -> Result<(), String> {
     tracing::info!("Update device: {}", id);
     // TODO: update in SQLite
     Ok(())

@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use super::connection::{JumpHostConfig, AuthMethod};
+use super::connection::JumpHostConfig;
 
 /// Build an SSH proxy chain through one or more jump hosts.
 ///
@@ -37,11 +37,6 @@ impl ProxyChain {
             return Ok(());
         }
 
-        // For each hop, we need to:
-        // 1. Connect to the hop
-        // 2. Open a direct-tcpip channel to the next hop (or target)
-        // 3. Use that channel as the transport for the next connection
-
         tracing::info!(
             "Building proxy chain: {} hops -> {}:{}",
             self.hops.len(),
@@ -50,9 +45,6 @@ impl ProxyChain {
         );
 
         // TODO: implement the actual tunnel chain
-        // This requires creating nested SSH connections where each
-        // channel_open_direct_tcpip provides the transport for the next level
-
         anyhow::bail!("Multi-hop proxy chains not yet implemented - single jump host works via direct connection")
     }
 }

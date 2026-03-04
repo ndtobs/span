@@ -49,7 +49,7 @@ pub async fn disconnect(session_id: String) -> Result<(), String> {
 
 /// Write data to an SSH session (user keyboard input)
 #[command]
-pub async fn write_data(session_id: String, data: String) -> Result<(), String> {
+pub async fn write_data(_session_id: String, _data: String) -> Result<(), String> {
     // TODO: ssh_manager.write(&session_id, data.as_bytes())
     Ok(())
 }
