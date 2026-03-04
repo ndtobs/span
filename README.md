@@ -44,20 +44,54 @@ Built to replace SecureCRT with a lightweight, keyboard-driven workflow — jump
 
 - [Rust](https://rustup.rs/) (stable)
 - [Node.js](https://nodejs.org/) >= 20
-- System deps for Tauri: see [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)
+- System deps for Tauri (see platform-specific setup below)
 
-### Setup
+### macOS Setup
 
 ```bash
-# Install frontend dependencies
+# Install Homebrew (if needed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Rust
+brew install rustup
+rustup-init
+
+# Install Node.js
+brew install node
+
+# Xcode Command Line Tools (required by Tauri for macOS builds)
+xcode-select --install
+
+# Clone and run
+git clone https://github.com/ndtobs/span.git
+cd span
 npm install
-
-# Run in development mode
 npm run tauri dev
+```
 
-# Build for production
+### Linux Setup (Ubuntu/Debian)
+
+```bash
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Tauri system dependencies
+sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+# Clone and run
+git clone https://github.com/ndtobs/span.git
+cd span
+npm install
+npm run tauri dev
+```
+
+### Build for Production
+
+```bash
 npm run tauri build
 ```
+
+> **Note:** First build takes several minutes to compile Rust dependencies. Subsequent builds are fast with hot reload for both frontend and backend.
 
 ### Project Structure
 
