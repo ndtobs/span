@@ -25,7 +25,7 @@ tokio = { version = "1", features = ["full"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 # Lua scripting
-mlua = { version = "0.10", features = ["luajit", "async", "serialize"] }
+mlua = { version = "0.10", features = ["luajit", "vendored", "async", "serialize"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
