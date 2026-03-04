@@ -54,6 +54,8 @@ pub struct SshSession {
 /// Handler for SSH client events
 pub struct SshHandler {
     data_tx: mpsc::Sender<Vec<u8>>,
+    /// Password stored for keyboard-interactive auth fallback
+    password: Option<String>,
 }
 
 #[async_trait]
@@ -65,7 +67,6 @@ impl russh::client::Handler for SshHandler {
         _server_public_key: &russh_keys::key::PublicKey,
     ) -> std::result::Result<bool, Self::Error> {
         // TODO: implement host key verification (known_hosts)
-        // For MVP, accept all keys (NOT safe for production)
         tracing::warn!("Accepting server key without verification - implement known_hosts check");
         Ok(true)
     }
@@ -82,7 +83,6 @@ impl russh::client::Handler for SshHandler {
 }
 
 impl SshSession {
-    /// Create a new SSH session (does not connect yet)
     pub fn new(id: String, config: ConnectionConfig) -> Self {
         Self {
             id,
@@ -97,12 +97,21 @@ impl SshSession {
     pub async fn connect(&mut self) -> Result<()> {
         let (data_tx, data_rx) = mpsc::channel(256);
 
+        let password_for_handler = match &self.config.target.auth {
+            AuthMethod::Password { password } => Some(password.clone()),
+            _ => None,
+        };
+
         let ssh_config = russh::client::Config::default();
-        let handler = SshHandler { data_tx };
+        let handler = SshHandler {
+            data_tx,
+            password: password_for_handler,
+        };
 
         let addr = format!("{}:{}", self.config.target.host, self.config.target.port);
         tracing::info!("Connecting to {}", addr);
 
+        // TCP + SSH handshake with timeout
         tracing::info!("Starting SSH handshake with {}...", addr);
         let mut handle = tokio::time::timeout(
             std::time::Duration::from_secs(10),
@@ -112,48 +121,21 @@ impl SshSession {
         .map_err(|_| anyhow::anyhow!("Connection timed out after 10 seconds ({})", addr))??;
         tracing::info!("SSH handshake complete with {}", addr);
 
-        // Authenticate
+        // Authenticate with timeout
         tracing::info!("Authenticating as {} to {}", self.config.target.username, self.config.target.host);
-        match &self.config.target.auth {
-            AuthMethod::Password { password } => {
-                tracing::info!("Trying password auth...");
-                let auth_result = handle
-                    .authenticate_password(&self.config.target.username, password)
-                    .await?;
-                tracing::info!("Password auth result: {}", auth_result);
-                if !auth_result {
-                    anyhow::bail!("Password authentication failed for {}", self.config.target.host);
-                }
-            }
-            AuthMethod::Key { key_path, passphrase } => {
-                let key = russh_keys::load_secret_key(key_path, passphrase.as_deref())?;
-                let auth_result = handle
-                    .authenticate_publickey(&self.config.target.username, Arc::new(key))
-                    .await?;
-                if !auth_result {
-                    anyhow::bail!("Key authentication failed");
-                }
-            }
-            AuthMethod::Agent => {
-                // TODO: implement SSH agent authentication
-                anyhow::bail!("SSH agent auth not yet implemented");
-            }
-        }
+        tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            self.do_auth(&mut handle),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("Authentication timed out after 15 seconds ({})", self.config.target.host))??;
 
         tracing::info!("Authentication successful for {}", self.config.target.host);
 
-        // Open a channel and request PTY
+        // Open channel, request PTY and shell
         let channel = handle.channel_open_session().await?;
         channel
-            .request_pty(
-                false,
-                "xterm-256color",
-                80,
-                24,
-                0,
-                0,
-                &[],
-            )
+            .request_pty(false, "xterm-256color", 80, 24, 0, 0, &[])
             .await?;
         tracing::info!("PTY requested, requesting shell...");
         channel.request_shell(false).await?;
@@ -166,7 +148,42 @@ impl SshSession {
         Ok(())
     }
 
-    /// Write data to the SSH channel (user input)
+    /// Try auth methods in order
+    async fn do_auth(&self, handle: &mut russh::client::Handle<SshHandler>) -> Result<()> {
+        match &self.config.target.auth {
+            AuthMethod::Password { password } => {
+                // Try password auth first
+                tracing::info!("Trying password auth...");
+                let auth_result = handle
+                    .authenticate_password(&self.config.target.username, password)
+                    .await?;
+                tracing::info!("Password auth result: {}", auth_result);
+
+                if !auth_result {
+                    anyhow::bail!(
+                        "Authentication failed for {}@{}",
+                        self.config.target.username,
+                        self.config.target.host
+                    );
+                }
+            }
+            AuthMethod::Key { key_path, passphrase } => {
+                tracing::info!("Trying key auth with {}...", key_path);
+                let key = russh_keys::load_secret_key(key_path, passphrase.as_deref())?;
+                let auth_result = handle
+                    .authenticate_publickey(&self.config.target.username, Arc::new(key))
+                    .await?;
+                if !auth_result {
+                    anyhow::bail!("Key authentication failed for {}", self.config.target.host);
+                }
+            }
+            AuthMethod::Agent => {
+                anyhow::bail!("SSH agent auth not yet implemented");
+            }
+        }
+        Ok(())
+    }
+
     pub async fn write(&self, data: &[u8]) -> Result<()> {
         if let Some(ref channel) = self.channel {
             channel.data(data).await?;
@@ -174,7 +191,6 @@ impl SshSession {
         Ok(())
     }
 
-    /// Resize the PTY
     pub async fn resize(&self, cols: u32, rows: u32) -> Result<()> {
         if let Some(ref channel) = self.channel {
             channel.window_change(cols, rows, 0, 0).await?;
@@ -182,7 +198,6 @@ impl SshSession {
         Ok(())
     }
 
-    /// Disconnect the session
     pub async fn disconnect(&mut self) -> Result<()> {
         if let Some(channel) = self.channel.take() {
             let _ = channel.eof().await;

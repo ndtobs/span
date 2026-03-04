@@ -83,67 +83,58 @@
   }
 
   async function connectWithDevice(device: any) {
-    connecting = true;
-    try {
-      const sessionId = crypto.randomUUID();
-      
-      sessionStore.add({
-        id: sessionId,
-        connectionId: device.connectionConfig.id,
-        name: device.name,
-        status: "connecting",
-        startedAt: Date.now(),
-      });
+    const sessionId = crypto.randomUUID();
+    
+    sessionStore.add({
+      id: sessionId,
+      connectionId: device.connectionConfig.id,
+      name: device.name,
+      status: "connecting",
+      startedAt: Date.now(),
+    });
 
-      await invoke("connect", {
-        sessionId,
-        host: device.connectionConfig.host,
-        port: device.connectionConfig.port,
-        username: device.connectionConfig.username,
-      });
+    // Close modal immediately — connection continues in background
+    onclose();
 
-      onclose();
-    } catch (error) {
+    invoke("connect", {
+      sessionId,
+      host: device.connectionConfig.host,
+      port: device.connectionConfig.port,
+      username: device.connectionConfig.username,
+    }).catch((error) => {
       console.error("Failed to connect:", error);
       sessionStore.updateStatus(sessionId, "error");
-    } finally {
-      connecting = false;
-    }
+    });
   }
 
   async function connectSSH(host: string, port: number, user: string, pass: string) {
     connecting = true;
-    try {
-      const sessionId = crypto.randomUUID();
-      
-      sessionStore.add({
-        id: sessionId,
-        connectionId: "",
-        name: host,
-        status: "connecting",
-        startedAt: Date.now(),
-      });
+    const sessionId = crypto.randomUUID();
+    
+    sessionStore.add({
+      id: sessionId,
+      connectionId: "",
+      name: host,
+      status: "connecting",
+      startedAt: Date.now(),
+    });
 
-      await invoke("connect", {
-        sessionId,
-        host,
-        port,
-        username: user,
-        password: pass,
-      });
+    // Close modal immediately — connection continues in background
+    onclose();
 
-      onclose();
-    } catch (error) {
+    // Fire and forget — status updates come via events
+    invoke("connect", {
+      sessionId,
+      host,
+      port,
+      username: user,
+      password: pass,
+    }).catch((error) => {
       console.error("Failed to connect:", error);
-      // Find the session and update its status
-      const sessions = sessionStore.sessions;
-      const session = sessions.find(s => s.name === host);
-      if (session) {
-        sessionStore.updateStatus(session.id, "error");
-      }
-    } finally {
-      connecting = false;
-    }
+      sessionStore.updateStatus(sessionId, "error");
+    });
+
+    connecting = false;
   }
 
   function handleKeydown(e: KeyboardEvent) {
