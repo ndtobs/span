@@ -49,7 +49,7 @@ pub async fn connect(
 
     // Spawn task to forward SSH data as Tauri events
     let session_id = args.session_id.clone();
-    let (tx, mut rx) = mpsc::channel(256);
+    let (tx, mut rx) = mpsc::channel::<Vec<u8>>(256);
     let app_handle_clone = app_handle.clone();
 
     tokio::spawn(async move {

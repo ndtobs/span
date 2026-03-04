@@ -16,7 +16,7 @@ fn main() {
     tracing_subscriber::fmt::init();
 
     tauri::Builder::default()
-        .manage_state(SshManager::new())
+        .manage(SshManager::new())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             // SSH commands
@@ -36,7 +36,7 @@ fn main() {
             commands::credentials::store_credential,
             commands::credentials::delete_credential,
         ])
-        .setup(|app| {
+        .setup(|app: &mut tauri::App| {
             // Initialize database
             let app_dir = app
                 .path()
