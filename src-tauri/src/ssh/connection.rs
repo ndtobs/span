@@ -178,12 +178,25 @@ impl SshSession {
                         .await?;
                     tracing::info!("KI response result: {:?}", ki_result);
 
-                    if !ki_result {
-                        anyhow::bail!(
-                            "Authentication failed for {}@{} (tried password + keyboard-interactive)",
-                            self.config.target.username,
-                            self.config.target.host
-                        );
+                    match ki_result {
+                        russh::client::KeyboardInteractiveAuthResponse::Success => {
+                            tracing::info!("Keyboard-interactive auth succeeded");
+                        }
+                        russh::client::KeyboardInteractiveAuthResponse::Failure => {
+                            anyhow::bail!(
+                                "Authentication failed for {}@{} (tried password + keyboard-interactive)",
+                                self.config.target.username,
+                                self.config.target.host
+                            );
+                        }
+                        other => {
+                            tracing::warn!("Unexpected KI response: {:?}", other);
+                            anyhow::bail!(
+                                "Unexpected keyboard-interactive response for {}@{}",
+                                self.config.target.username,
+                                self.config.target.host
+                            );
+                        }
                     }
                 }
             }
