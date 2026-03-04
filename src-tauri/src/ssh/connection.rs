@@ -165,15 +165,14 @@ impl SshSession {
 
                     // Step 1: Initiate keyboard-interactive
                     let ki_result = handle
-                        .authenticate_keyboard_interactive(&self.config.target.username, None)
+                        .authenticate_keyboard_interactive_start(&self.config.target.username, None)
                         .await?;
                     tracing::info!("KI initiation result: {:?}", ki_result);
 
                     // Step 2: Respond with password to the prompt
                     tracing::info!("Sending KI response...");
                     let ki_result = handle
-                        .authenticate_keyboard_interactive_response(
-                            &self.config.target.username,
+                        .authenticate_keyboard_interactive_respond(
                             vec![password.clone()],
                         )
                         .await?;
