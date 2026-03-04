@@ -58,7 +58,7 @@
     {/if}
 
     <div class="main-content">
-      <TabBar />
+      <TabBar onnewconnection={() => showQuickConnect = true} />
 
       <div class="terminal-area">
         {#if sessionStore.activeSession}

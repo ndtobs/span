@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { Session } from "$lib/types";
 
 /**
@@ -37,9 +38,21 @@ class SessionStore {
     this.activeId = id;
   }
 
-  closeActive() {
+  async closeActive() {
     if (this.activeId) {
-      this.remove(this.activeId);
+      await this.disconnect(this.activeId);
+    }
+  }
+
+  async disconnect(id: string) {
+    try {
+      // Disconnect from backend before removing from store
+      await invoke("disconnect", { sessionId: id });
+    } catch (error) {
+      console.error("Failed to disconnect session:", error);
+    } finally {
+      // Always remove from store even if disconnect fails
+      this.remove(id);
     }
   }
 

@@ -11,9 +11,9 @@
   let { onadddevice }: Props = $props();
 
   async function handleDeviceClick(device: InventoryDevice) {
+    const sessionId = crypto.randomUUID();
+    
     try {
-      const sessionId = crypto.randomUUID();
-      
       sessionStore.add({
         id: sessionId,
         connectionId: device.connectionConfig.id,
