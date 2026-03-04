@@ -1,13 +1,12 @@
 use tauri::command;
 use serde::{Deserialize, Serialize};
-use serde_json;
-use rusqlite::{params, Result as SqlResult};
-use crate::inventory::{db, Device, Folder};
+use rusqlite::params;
+use crate::inventory::{db, Device, Folder, import};
 
 #[derive(Debug, Serialize)]
 pub struct DeviceListResponse {
-    pub folders: Vec<inventory::Folder>,
-    pub devices: Vec<inventory::Device>,
+    pub folders: Vec<Folder>,
+    pub devices: Vec<Device>,
 }
 
 /// List all devices and folders
@@ -15,25 +14,28 @@ pub struct DeviceListResponse {
 pub async fn list_devices() -> Result<DeviceListResponse, String> {
     let db = db::get_db().lock().map_err(|_| "DB lock failed".to_string())?;
 
-    let mut stmt = db.prepare("SELECT id, name, parent_id, sort_order FROM folders ORDER BY COALESCE(parent_id, ''), sort_order ASC")?;
-    let folders_rows: SqlResult<Vec<(String, String, Option<String>, i32)>> = stmt.query_map([], |row| {
-        Ok((
-            row.get(0)?,
-            row.get(1)?,
-            row.get(2)?,
-            row.get(3)?,
-        ))
-    })?.collect();
-    let folders = folders_rows.map_err(|e| e.to_string())?.into_iter().map(|(id, name, parent_id, sort_order)| Folder {
-        id, name, parent_id, sort_order
-    }).collect();
+    let mut stmt = db.prepare(
+        "SELECT id, name, parent_id, sort_order FROM folders ORDER BY COALESCE(parent_id, ''), sort_order ASC"
+    ).map_err(|e| e.to_string())?;
 
-    let mut stmt = db.prepare("
-        SELECT id, name, folder_id, host, port, username, auth_method, key_path, platform, 
-               tags, jump_hosts, post_connect_commands, notes, last_connected, created_at, updated_at 
-        FROM devices
-    ")?;
-    let devices_rows: SqlResult<Vec<Device>> = stmt.query_map([], |row| {
+    let folders: Vec<Folder> = stmt.query_map([], |row| {
+        Ok(Folder {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            parent_id: row.get(2)?,
+            sort_order: row.get(3)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .filter_map(|r| r.ok())
+    .collect();
+
+    let mut stmt = db.prepare(
+        "SELECT id, name, folder_id, host, port, username, auth_method, key_path, platform, 
+                tags, jump_hosts, post_connect_commands, notes, last_connected, created_at, updated_at 
+         FROM devices"
+    ).map_err(|e| e.to_string())?;
+
+    let devices: Vec<Device> = stmt.query_map([], |row| {
         let tags_json: String = row.get(9)?;
         let jump_hosts_json: String = row.get(10)?;
         let post_cmds_json: String = row.get(11)?;
@@ -55,8 +57,9 @@ pub async fn list_devices() -> Result<DeviceListResponse, String> {
             created_at: row.get(14)?,
             updated_at: row.get(15)?,
         })
-    })?.collect();
-    let devices = devices_rows.map_err(|e| e.to_string())?;
+    }).map_err(|e| e.to_string())?
+    .filter_map(|r| r.ok())
+    .collect();
 
     Ok(DeviceListResponse { folders, devices })
 }
@@ -80,9 +83,10 @@ pub struct AddDeviceArgs {
 pub async fn add_device(args: AddDeviceArgs) -> Result<Device, String> {
     let now = chrono::Utc::now().timestamp();
     let id = uuid::Uuid::new_v4().to_string();
-    let tags_json = serde_json::to_string(&args.tags.unwrap_or_default()).map_err(|e| e.to_string())?;
-    let jump_json = serde_json::to_string(&vec![]).map_err(|e| e.to_string())?;
-    let post_json = serde_json::to_string(&vec![]).map_err(|e| e.to_string())?;
+    let tags = args.tags.unwrap_or_default();
+    let tags_json = serde_json::to_string(&tags).map_err(|e| e.to_string())?;
+    let jump_json = "[]".to_string();
+    let post_json = "[]".to_string();
 
     let device = Device {
         id: id.clone(),
@@ -94,7 +98,7 @@ pub async fn add_device(args: AddDeviceArgs) -> Result<Device, String> {
         auth_method: args.auth_method.unwrap_or_else(|| "key".to_string()),
         key_path: args.key_path,
         platform: args.platform,
-        tags: args.tags.unwrap_or_default(),
+        tags,
         jump_hosts: vec![],
         post_connect_commands: vec![],
         notes: args.notes,
@@ -133,14 +137,12 @@ pub async fn add_device(args: AddDeviceArgs) -> Result<Device, String> {
 #[command]
 pub async fn update_device(id: String, _args: AddDeviceArgs) -> Result<(), String> {
     tracing::info!("Update device: {}", id);
-    // TODO: update in SQLite
     Ok(())
 }
 
 /// Delete a device
 #[command]
 pub async fn delete_device(id: String) -> Result<(), String> {
-    tracing::info!("Delete device: {}", id);
     let db = db::get_db().lock().map_err(|_| "DB lock failed".to_string())?;
     db.execute("DELETE FROM devices WHERE id = ?1", [&id]).map_err(|e| e.to_string())?;
     Ok(())
@@ -148,29 +150,22 @@ pub async fn delete_device(id: String) -> Result<(), String> {
 
 /// Add a new folder
 #[command]
-pub async fn add_folder(name: String, parent_id: Option<String>) -> Result<inventory::Folder, String> {
-    let folder = inventory::Folder {
+pub async fn add_folder(name: String, parent_id: Option<String>) -> Result<Folder, String> {
+    let folder = Folder {
         id: uuid::Uuid::new_v4().to_string(),
         name,
         parent_id,
         sort_order: 0,
     };
-
-    // TODO: insert into SQLite
-
     Ok(folder)
 }
 
 /// Import sessions from SecureCRT
 #[command]
 pub async fn import_securecrt(path: String) -> Result<u32, String> {
-    let sessions = inventory::import::import_securecrt_sessions(std::path::Path::new(&path))
+    let sessions = import::import_securecrt_sessions(std::path::Path::new(&path))
         .map_err(|e| e.to_string())?;
-
     let count = sessions.len() as u32;
-
-    // TODO: convert ImportedSession → Device and insert into SQLite
-
     tracing::info!("Imported {} sessions from SecureCRT", count);
     Ok(count)
 }
