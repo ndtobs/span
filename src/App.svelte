@@ -1,6 +1,5 @@
 <script lang="ts">
   import "./app.css";
-  import TitleBar from "$lib/components/TitleBar.svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import TabBar from "$lib/components/TabBar.svelte";
   import Terminal from "$lib/components/Terminal.svelte";
@@ -47,8 +46,6 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="app-container">
-  <TitleBar />
-
   <div class="app-body">
     {#if uiStore.sidebarVisible}
       <Sidebar />
@@ -63,7 +60,7 @@
         {:else}
           <div class="welcome">
             <div class="welcome-content">
-              <h1>Span</h1>
+              <h1>⚡ Span</h1>
               <p class="subtitle">SSH Terminal for Network Engineers</p>
               <div class="shortcuts">
                 <div class="shortcut"><kbd>Ctrl+K</kbd> Quick Connect</div>
