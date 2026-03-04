@@ -41,7 +41,15 @@ pub async fn connect(
             host: args.host,
             port: args.port,
             username: args.username,
-            auth: AuthMethod::Password { password: args.password.unwrap_or_default() }, // TODO: handle auth methods
+            auth: match args.auth_method.as_str() {
+
+            "password" => AuthMethod::Password { password: args.password.unwrap_or_default() },
+
+            "key" => AuthMethod::Key { key_path: args.key_path.unwrap_or_default() },
+
+            _ => AuthMethod::Password { password: args.password.unwrap_or_default() },
+
+        },
         },
         jump_hosts: vec![], // TODO: handle jump hosts
         keepalive_interval: None,
