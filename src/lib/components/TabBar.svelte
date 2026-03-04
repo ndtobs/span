@@ -30,7 +30,7 @@
         <span class="tab-name">{session.name}</span>
         <button
           class="tab-close"
-          onclick|stopPropagation={() => sessionStore.remove(session.id)}
+          onclick={(e: MouseEvent) => { e.stopPropagation(); sessionStore.remove(session.id); }}
           aria-label="Close tab"
         >
           ✕

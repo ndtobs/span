@@ -91,8 +91,8 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="overlay" onclick={onclose}>
-  <div class="quick-connect" onclick|stopPropagation>
-    <form onsubmit|preventDefault={handleSubmit}>
+  <div class="quick-connect" onclick={(e: MouseEvent) => e.stopPropagation()}>
+    <form onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit(); }}>
       <input
         bind:this={inputEl}
         bind:value={query}
