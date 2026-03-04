@@ -1,25 +1,9 @@
 use tauri::command;
 use tauri::{AppHandle, State, Emitter};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use crate::ssh::{manager::SshManager, connection::{ConnectionConfig, SshConfig, AuthMethod}};
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConnectArgs {
-    pub session_id: String,
-    pub host: String,
-    pub port: u16,
-    pub username: String,
-    #[serde(default)]
-    pub auth_method: String,
-    pub password: Option<String>,
-    pub key_path: Option<String>,
-    pub jump_host: Option<String>,
-    pub jump_port: Option<u16>,
-    pub jump_username: Option<String>,
-}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,25 +18,33 @@ pub struct ConnectResult {
 pub async fn connect(
     app_handle: AppHandle,
     ssh_manager: State<'_, SshManager>,
-    args: ConnectArgs
+    session_id: String,
+    host: String,
+    port: u16,
+    username: String,
+    auth_method: Option<String>,
+    password: Option<String>,
+    key_path: Option<String>,
 ) -> Result<ConnectResult, String> {
-    tracing::info!("SSH connect: {}@{}:{}", args.username, args.host, args.port);
+    tracing::info!("SSH connect: {}@{}:{}", username, host, port);
+
+    let auth = match auth_method.as_deref().unwrap_or("password") {
+        "key" => AuthMethod::Key { key_path: key_path.unwrap_or_default(), passphrase: None },
+        _ => AuthMethod::Password { password: password.unwrap_or_default() },
+    };
 
     let config = ConnectionConfig {
         target: SshConfig {
-            host: args.host,
-            port: args.port,
-            username: args.username,
-            auth: match args.auth_method.as_str() {
-                "key" => AuthMethod::Key { key_path: args.key_path.unwrap_or_default(), passphrase: None },
-                _ => AuthMethod::Password { password: args.password.unwrap_or_default() },
-            },
+            host,
+            port,
+            username,
+            auth,
         },
         jump_hosts: vec![], // TODO: handle jump hosts
         keepalive_interval: None,
     };
 
-    let session_id = args.session_id.clone();
+    let session_id = session_id.clone();
 
     // Connect — returns the real rx channel with SSH output data
     let mut rx = ssh_manager.connect(session_id.clone(), config).await.map_err(|e| {
