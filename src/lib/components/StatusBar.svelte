@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { sessionStore } from "$lib/stores/sessions";
+  import { sessionStore } from "$lib/stores/sessions.svelte";
 
   let now = $state(Date.now());
 

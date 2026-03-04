@@ -5,8 +5,8 @@
   import Terminal from "$lib/components/Terminal.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
   import QuickConnect from "$lib/components/QuickConnect.svelte";
-  import { sessionStore } from "$lib/stores/sessions";
-  import { uiStore } from "$lib/stores/ui";
+  import { sessionStore } from "$lib/stores/sessions.svelte";
+  import { uiStore } from "$lib/stores/ui.svelte";
 
   let showQuickConnect = $state(false);
 

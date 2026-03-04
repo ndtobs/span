@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { sessionStore } from "$lib/stores/sessions";
+  import { sessionStore } from "$lib/stores/sessions.svelte";
 
   function statusColor(status: string): string {
     switch (status) {

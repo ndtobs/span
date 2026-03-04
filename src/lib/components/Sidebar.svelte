@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { inventoryStore } from "$lib/stores/inventory";
+  import { inventoryStore } from "$lib/stores/inventory.svelte";
   import type { InventoryFolder, InventoryDevice } from "$lib/types";
 
   function handleDeviceClick(device: InventoryDevice) {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { sessionStore } from "$lib/stores/sessions";
-  import { inventoryStore } from "$lib/stores/inventory";
+  import { sessionStore } from "$lib/stores/sessions.svelte";
+  import { inventoryStore } from "$lib/stores/inventory.svelte";
 
   interface Props {
     onclose: () => void;

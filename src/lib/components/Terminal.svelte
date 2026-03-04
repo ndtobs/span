@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { sessionStore } from "$lib/stores/sessions";
+  import { sessionStore } from "$lib/stores/sessions.svelte";
   import type { Session } from "$lib/types";
 
   interface Props {
