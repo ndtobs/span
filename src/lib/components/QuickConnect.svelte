@@ -29,7 +29,7 @@
     port: number;
   } {
     let username = "";
-    let host = input.trim();
+    let host = input.trim().replace(/^ssh\s+/i, "");
     let port = 22;
 
     // user@host

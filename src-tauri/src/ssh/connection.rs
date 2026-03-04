@@ -103,8 +103,12 @@ impl SshSession {
         let addr = format!("{}:{}", self.config.target.host, self.config.target.port);
         tracing::info!("Connecting to {}", addr);
 
-        let mut handle =
-            russh::client::connect(Arc::new(ssh_config), addr.as_str(), handler).await?;
+        let mut handle = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            russh::client::connect(Arc::new(ssh_config), addr.as_str(), handler),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("Connection timed out after 10 seconds"))??;
 
         // Authenticate
         match &self.config.target.auth {
