@@ -113,13 +113,16 @@ impl SshSession {
         tracing::info!("SSH handshake complete with {}", addr);
 
         // Authenticate
+        tracing::info!("Authenticating as {} to {}", self.config.target.username, self.config.target.host);
         match &self.config.target.auth {
             AuthMethod::Password { password } => {
+                tracing::info!("Trying password auth...");
                 let auth_result = handle
                     .authenticate_password(&self.config.target.username, password)
                     .await?;
+                tracing::info!("Password auth result: {}", auth_result);
                 if !auth_result {
-                    anyhow::bail!("Password authentication failed");
+                    anyhow::bail!("Password authentication failed for {}", self.config.target.host);
                 }
             }
             AuthMethod::Key { key_path, passphrase } => {
